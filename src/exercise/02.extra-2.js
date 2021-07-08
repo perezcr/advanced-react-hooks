@@ -1,5 +1,5 @@
 // useCallback: custom hooks
-// http://localhost:3000/isolated/exercise/02.js
+// http://localhost:3000/isolated/exercise/02.extra-2.js
 
 import * as React from 'react';
 import {
@@ -27,7 +27,7 @@ function asyncReducer(state, action) {
   }
 }
 
-function useAsync(asyncCallback, initialState) {
+function useAsync(initialState) {
   const [state, dispatch] = React.useReducer(asyncReducer, {
     status: 'idle',
     data: null,
@@ -35,8 +35,12 @@ function useAsync(asyncCallback, initialState) {
     ...initialState,
   });
 
-  React.useEffect(() => {
-    const promise = asyncCallback();
+  // Dispatch basically sends the type of action to the reducer function to perform its job, which, of course, is updating the state.
+  // It means that the hook is going to render again, and if the run function is not memoized so it gonna render in a loop.
+  // So, we need to use useCallback
+  // We can ensure that the run function only changes when necessary
+  // The run function is consistent over time because it is using useCallback.
+  const run = React.useCallback(promise => {
     if (!promise) {
       return;
     }
@@ -49,27 +53,23 @@ function useAsync(asyncCallback, initialState) {
         dispatch({type: 'rejected', error});
       },
     );
-  }, [asyncCallback]);
+    // I'm not getting any weird underlines for this. We are using this dispatch, but that is coming from useReducer, and ESLint plugin knows that this dispatch will never change. useReducer ensures that for us, we'll never get a new dispatch function, even as these functions are re-rendering, so we don't need to include dispatch in there
+  }, []);
 
-  return state;
+  return {...state, run};
 }
 
 function PokemonInfo({pokemonName}) {
-  // The problem is this function is going to be redefined on every render. That means that every render that's used useAsync is going to call this function, even if the Pokemon name did not change. That could absolutely be a problem.
-  // That is exactly what useCallback does. I'm going to make an async callback here with React useCallback.
-  // Now, React is going to make sure that this callback that we get assigned to async callback will be the same one that we've created in the first place until the Pokemon name changes.
-  const asyncCallback = React.useCallback(() => {
-    if (!pokemonName) {
-      return;
-    }
-    return fetchPokemon(pokemonName);
-  }, [pokemonName]);
-
-  const state = useAsync(asyncCallback, {
+  const {data, status, error, run} = useAsync({
     status: pokemonName ? 'pending' : 'idle',
   });
 
-  const {data, status, error} = state;
+  React.useEffect(() => {
+    if (!pokemonName) {
+      return;
+    }
+    run(fetchPokemon(pokemonName));
+  }, [pokemonName, run]);
 
   if (status === 'idle' || !pokemonName) {
     return 'Submit a pokemon';
